@@ -1,0 +1,9 @@
+flask==3.0.2
+torch==2.1.2
+requests==2.31.0
+huggingface-hub==0.21.4
+numpy
+regex!=2019.12.17
+safetensors>=0.4.1
+tokenizers
+transformers==4.38.2

@@ -35,8 +35,7 @@ def func():
             use_cache=True,
             output_attentions=False,)
     hidden_states = outputs[0]
-        
-    print("hmmm")
+    
     res0 = hidden_states.detach().numpy().tolist()
 
     return jsonify({"res": res0})

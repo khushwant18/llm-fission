@@ -31,7 +31,7 @@ A client is a machine responsible for hosting the embedding layer and lm_head.
 
 3. Launch a server container, designating its role ('server') alongside the required layer range (0 through 11):
    ```bash
-   docker run -e USER_TYPE=server -e LAYERS=0:11 --network mynetwork -p 7001:7001 --name my_container docker_test
+   docker run -e DEVICE="cpu" -e REPO="Writer/palmyra-small" -e USER_TYPE=server -e LAYERS=0:11 --network my_network -p 7001:7001 --name my_container docker_test
    ```
 
 #### Client
@@ -45,7 +45,7 @@ A client is a machine responsible for hosting the embedding layer and lm_head.
 
 2. Initialize a client container, identifying itself accordingly ('client'), along with the URL mappings associated with each respective server layer:
    ```bash
-   docker run -e USER_TYPE=client -e LAYER_URL_MAPPING="0:11=http://my_container:7001/block," --network mynetwork -p 7002:7002 --name my_container2 docker_test
+   docker run -e DEVICE="cpu" -e REPO="Writer/palmyra-small" -e USER_TYPE=client -e LAYER_URL_MAPPING="0:11=http://my_container:7001/block2," --network my_network -p 7002:7002 --name my_container2 docker_test
    ```
 
 ## Local Network Setup

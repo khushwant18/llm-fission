@@ -34,26 +34,11 @@ def process_request():
     data = request.get_json()
     hidden_states = torch.tensor(data['hidden_states'])
 
-<<<<<<< HEAD
     processed_states = process_blocks(blocks, hidden_states)
-=======
-    outputs=blocks[i](hidden_states,
-            layer_past=None,
-            attention_mask=None,
-            head_mask=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            use_cache=True,
-            output_attentions=False,)
-    hidden_states = outputs[0]
-    
-    res0 = hidden_states.detach().numpy().tolist()
->>>>>>> origin/main
 
     return jsonify({"res": processed_states})
 
 if __name__ == '__main__':
-<<<<<<< HEAD
     args = parse_arguments()
 
     device_type = args.device
@@ -64,6 +49,4 @@ if __name__ == '__main__':
 
     blocks = load_blocks(model_path, layers, device_type)
 
-=======
->>>>>>> origin/main
     app.run(host='0.0.0.0', port=7001)

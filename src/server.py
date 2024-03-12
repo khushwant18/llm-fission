@@ -5,7 +5,7 @@ from utils.load_layers import load_pretrained_block
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Your script description')
-    parser.add_argument('--layers', type=int, nargs='+', required=True, help='Range of layer IDs')
+    parser.add_argument('--layers', nargs='+', required=True, help='Range of layer IDs')
     parser.add_argument('--device', choices=['cpu', 'mps', 'cuda'], help='Device type to use ("cpu" or "cuda").')
     parser.add_argument('--model', help='Enter Hugging Face repo')
     return parser.parse_args()
@@ -25,14 +25,14 @@ def process_blocks(blocks, hidden_states):
                         use_cache=True,
                         output_attentions=False)
         hidden_states = outputs[0]
-    return hidden_states.detach().numpy().tolist()
+    return hidden_states.to('cpu').detach().numpy().tolist()
 
 app = Flask(__name__)
 
 @app.route('/block2', methods=['POST'])
 def process_request():
     data = request.get_json()
-    hidden_states = torch.tensor(data['hidden_states'])
+    hidden_states = torch.tensor(data['hidden_states']).to(device_type)
 
     processed_states = process_blocks(blocks, hidden_states)
 

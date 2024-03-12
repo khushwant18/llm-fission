@@ -1,0 +1,27 @@
+FROM python:3.8-slim
+
+WORKDIR /app
+
+COPY docker/requirements.txt /app/docker/docker_test/requirements.txt
+
+RUN pip install --no-cache-dir -r /app/docker/docker_test/requirements.txt
+
+# COPY test_container.py .
+# COPY load_layers.py .
+# COPY transformers transformers
+
+# COPY test_container_layer.py .
+
+COPY docker/entrypoint.sh /app/docker/docker_test/entrypoint.sh
+
+# Copy the contents of the local src directory to the working directory
+COPY src/models /app/docker/docker_test/models
+COPY src/utils /app/docker/docker_test/utils
+
+# Copy the client.py file to the docker_test directory
+COPY src/client.py /app/docker/docker_test/client.py
+COPY src/server.py /app/docker/docker_test/server.py
+
+
+
+CMD ["/app/docker/docker_test/entrypoint.sh"]

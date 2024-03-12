@@ -1,8 +1,8 @@
 import numpy as np
 import requests
 import torch
-
-def process_hidden_states(layer_url_map, hidden_states):
+# from ...client import device_type
+def process_hidden_states(layer_url_map, hidden_states, device_type):
     """
     Processes the given hidden states by sending them to the specified URLs and returns the modified hidden states.
     
@@ -34,5 +34,5 @@ def process_hidden_states(layer_url_map, hidden_states):
             print(f"Error occurred while making a request to {url}: {e}")
 
     # Convert the final hidden states back to a Pytorch tensor
-    final_hidden_states = torch.tensor(current_hidden_states_np)
+    final_hidden_states = torch.tensor(current_hidden_states_np).to(device_type)
     return final_hidden_states

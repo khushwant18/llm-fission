@@ -767,7 +767,7 @@ class GPT2Model(GPT2PreTrainedModel):
     def forward(
         self,
         ln_f,
-        wte,wpe,layer_url_map,
+        wte,wpe,layer_url_map, device_type,
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
@@ -880,7 +880,7 @@ class GPT2Model(GPT2PreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
 
-        hidden_states = process_hidden_states(layer_url_map, hidden_states)
+        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type)
         
         hidden_states = ln_f(hidden_states)
 

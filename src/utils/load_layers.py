@@ -18,8 +18,9 @@ from huggingface_hub import get_hf_file_metadata, hf_hub_url
 from huggingface_hub.utils import EntryNotFoundError
 from transformers import PretrainedConfig
 from transformers.utils import get_file_from_repo
-from models.gpt2.custom_modeling_gpt2 import GPT2Block
 
+from transformers import AutoConfig
+from utils.model_type import detect_language_model_family, load_model, get_block_prefix, get_embedding_layer
 
 StateDict = Dict[str, torch.Tensor]
 
@@ -186,7 +187,8 @@ def _load_state_dict_from_local_file(path: str, *, block_prefix: Optional[str] =
 
 def load_pretrained_embedding(
     model_name: str,
-    embedding_prefix: int,
+    model_type: str,
+    emb_type:  str,
     *,
     config: Optional[PretrainedConfig] = None,
     torch_dtype: Union[torch.dtype, str] = "auto",
@@ -205,16 +207,8 @@ def load_pretrained_embedding(
 
     # with init_empty_weights():
     embed_dim = config.hidden_size
-    if 'wte' in embedding_prefix:
-        embed_layer = nn.Embedding(config.vocab_size, embed_dim)
-    elif 'wpe' in embedding_prefix:
-        embed_layer = nn.Embedding(config.max_position_embeddings, embed_dim)
-    elif 'ln_f' in embedding_prefix:
-        embed_layer = nn.LayerNorm(embed_dim, eps=config.layer_norm_epsilon)
-    elif 'lm_head' in embedding_prefix:
-        embedding_prefix = "transformer.wte"
-        embed_layer = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-    # block_prefix = f"{config.block_prefix}.{block_index}."
+    embed_layer, embedding_prefix = get_embedding_layer(config,embed_dim,emb_type,model_type)
+
    
     state_dict = _load_state_dict_from_repo(
         model_name,
@@ -246,7 +240,6 @@ def load_pretrained_embedding(
 # print(config.hidden_size)
 
 
-
 def load_pretrained_block(
     model_name: str,
     block_index: int,
@@ -267,11 +260,12 @@ def load_pretrained_block(
     # torch_dtype = resolve_block_dtype(config, torch_dtype)
 
     # with init_empty_weights():
-
-    block = GPT2Block(config)
-
+    model_type = detect_language_model_family(config)
+    block = load_model(config, model_type)
+    block_prefix = get_block_prefix(block_index, model_type)
     # block_prefix = f"{config.block_prefix}.{block_index}."
-    block_prefix = f"transformer.h.{block_index}"
+    
+    
     state_dict = _load_state_dict_from_repo(
         model_name,
         block_prefix,

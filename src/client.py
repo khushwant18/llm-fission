@@ -4,6 +4,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from models.gpt2.custom_modeling_gpt2 import GPT2Model
 from utils.load_layers import load_pretrained_embedding
+from utils.model_type import detect_language_model_family, load_full_model
+
 
 app = Flask(__name__)
 
@@ -28,24 +30,39 @@ def parse_layer_url_mapping(layer_urls):
     return layer_url_map
 
 def load_transformer_components(model_path, device_type):
-    wte = load_pretrained_embedding(model_path, "transformer.wte").eval().to(device_type)
-    wpe = load_pretrained_embedding(model_path, "transformer.wpe").eval().to(device_type)
-    lm_head = load_pretrained_embedding(model_path, "lm_head").eval().to(device_type)
-    ln_f = load_pretrained_embedding(model_path, "transformer.ln_f").eval().to(device_type)
-
+    
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    config = AutoConfig.from_pretrained(model_path)
-    pretrained_transformer = GPT2Model(config)
+    pretrained_transformer = load_full_model(config, model_type)
 
-    return wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer
+    if model_type == "gpt2":
+        wte = load_pretrained_embedding(model_path,"gpt2", "wte").eval().to(device_type)
+        wpe = load_pretrained_embedding(model_path, "gpt2",  "wpe").eval().to(device_type)
+        lm_head = load_pretrained_embedding(model_path, "gpt2",  "lm_head").eval().to(device_type)
+        ln_f = load_pretrained_embedding(model_path, "gpt2", "ln_f").eval().to(device_type)
+        return wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer
+    if model_type == "llama":
+        embed_tokens = load_pretrained_embedding(model_path, "llama",  "embed_tokens").eval().to(device_type)
+        lm_head = load_pretrained_embedding(model_path, "llama",  "lm_head").eval().to(device_type)
+        norm = load_pretrained_embedding(model_path, "llama", "norm").eval().to(device_type)
+        return embed_tokens, lm_head, norm, tokenizer, pretrained_transformer
+
+    
+
+
 
 def generate_text(prompt, max_len, transformer_components, layer_url_map):
-    wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer = transformer_components
+    if model_type == "gpt2":
+        wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer = transformer_components
+    elif model_type == "llama":
+        embed_tokens, lm_head, norm, tokenizer, pretrained_transformer = transformer_components
     input_ids = tokenizer.encode(prompt, return_tensors="pt", max_length=max_len).to(device_type)
 
     with torch.no_grad():
         for _ in range(max_len):
-            transformer_outputs = pretrained_transformer(input_ids=input_ids, wte=wte, wpe=wpe, ln_f=ln_f, layer_url_map=layer_url_map)
+            if model_type == "gpt2":
+                transformer_outputs = pretrained_transformer(input_ids=input_ids, wte=wte, wpe=wpe, ln_f=ln_f, layer_url_map=layer_url_map, device_type=device_type)
+            elif model_type == "llama":
+                transformer_outputs = pretrained_transformer(input_ids=input_ids, embed_tokens=embed_tokens, norm=norm, layer_url_map=layer_url_map, device_type=device_type)
             logits = transformer_outputs[0]
             logits = lm_head(logits)
             next_token = torch.argmax(logits[:, -1, :])
@@ -71,7 +88,8 @@ if __name__ == '__main__':
     layer_url_map = parse_layer_url_mapping(args.layer_url_mapping)
     device_type = args.device
     model_path = args.model
-
+    config = AutoConfig.from_pretrained(model_path)
+    model_type = detect_language_model_family(config)
     transformer_components = load_transformer_components(model_path, device_type)
 
     app.run(host='0.0.0.0', port=7002)

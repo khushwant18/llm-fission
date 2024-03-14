@@ -1,6 +1,6 @@
 from transformers import AutoConfig
 from models.gpt2.custom_modeling_gpt2 import GPT2Block, GPT2Model
-from models.llama.custom_modeling_llama import LlamaDecoderLayer, LlamaModel
+from models.llama.custom_modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaRMSNorm
 from torch import nn
 
 def detect_language_model_family(config):
@@ -9,11 +9,11 @@ def detect_language_model_family(config):
     model_type = config.model_type.lower()
     return model_type
 
-def load_model(config, model_type):
+def load_model(config, model_type,block_index=None):
     if model_type == "gpt2":
         block = GPT2Block(config)
     elif model_type == "llama":
-        block = LlamaDecoderLayer(config)
+        block = LlamaDecoderLayer(config,int(block_index))
     return block
 
 def load_full_model(config, model_type):
@@ -49,11 +49,11 @@ def get_embedding_layer(config,embed_dim, emb_type, model_type):
             embed_layer = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
             embedding_prefix = "model.embed_tokens"
         elif emb_type == 'norm':
-            embed_layer = nn.LayerNorm(embed_dim, eps=config.layer_norm_epsilon)
+            embed_layer = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
             embedding_prefix = "model.norm"
         elif emb_type == 'lm_head':
-            embedding_prefix = "model.embed_tokens"
-            embed_layer = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+            embedding_prefix = "lm_head"
+            embed_layer = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
     
 
     return embed_layer, embedding_prefix

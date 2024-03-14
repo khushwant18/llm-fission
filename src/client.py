@@ -7,6 +7,8 @@ from utils.load_layers import load_pretrained_embedding
 from utils.model_type import detect_language_model_family, load_full_model
 
 
+
+
 app = Flask(__name__)
 
 def parse_arguments():
@@ -91,5 +93,6 @@ if __name__ == '__main__':
     config = AutoConfig.from_pretrained(model_path)
     model_type = detect_language_model_family(config)
     transformer_components = load_transformer_components(model_path, device_type)
+   
 
     app.run(host='0.0.0.0', port=7002)

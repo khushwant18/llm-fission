@@ -261,10 +261,10 @@ def load_pretrained_block(
 
     # with init_empty_weights():
     model_type = detect_language_model_family(config)
-    block = load_model(config, model_type)
+    block = load_model(config, model_type,block_index)
     block_prefix = get_block_prefix(block_index, model_type)
     # block_prefix = f"{config.block_prefix}.{block_index}."
-    
+    # print("block_prefix",block_prefix)
     
     state_dict = _load_state_dict_from_repo(
         model_name,

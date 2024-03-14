@@ -936,7 +936,7 @@ class LlamaModel(LlamaPreTrainedModel):
     def forward(
         self,
         layer_url_map,
-        norm, embed_tokens,
+        norm, embed_tokens,device_type,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -985,7 +985,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        # causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -993,8 +993,8 @@ class LlamaModel(LlamaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
-        hidden_states = process_hidden_states(layer_url_map, hidden_states)
+        next_decoder_cache = None 
+        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, cache_position=cache_position, position_ids=position_ids)
         # for decoder_layer in self.layers:
         #     if output_hidden_states:
         #         all_hidden_states += (hidden_states,)

@@ -1,70 +1,48 @@
 import argparse
+import logging
 from flask import Flask, request, jsonify
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from models.gpt2.custom_modeling_gpt2 import GPT2Model
-from utils.load_layers import load_pretrained_embedding
-from utils.model_type import detect_language_model_family, load_full_model
-
-
-
+from typing import List, Dict, Any
+from utils.transformer_components import load_transformer_components
+from utils.model_type import detect_language_model_family
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
+    """Parses command-line arguments for the script."""
     parser = argparse.ArgumentParser(description='Client script for interacting with the GPT-2 model server')
     parser.add_argument('--layer_url_mapping', required=True, help='Layer to URL mapping')
-    parser.add_argument('--device', choices=['cpu', 'cuda'], help='Device type to use ("cpu" or "cuda").')
-    parser.add_argument('--model', help='Enter Hugging Face repo')
+    parser.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device type to use ("cpu" or "cuda").')
+    parser.add_argument('--model', required=True, help='Enter Hugging Face repo')
+    parser.add_argument('--port', default=5000, type=int, help='Enter port number')
     return parser.parse_args()
 
-def parse_layer_url_mapping(layer_urls):
+def parse_layer_url_mapping(layer_urls: str) -> List[Dict[str, Any]]:
+    """Parses a string containing layer to URL mappings into a list of dictionaries."""
     layer_url_map = []
-    pairs = layer_urls.rstrip(',').split(',')
-
-    for pair in pairs:
-        parts = pair.split('=')
-        if len(parts) == 2:
-            start, end = map(int, parts[0].split(':'))
-            url = parts[1]
-            layer_url_map.append(url)
+    try:
+        pairs = layer_urls.rstrip(',').split(',')
+        for pair in pairs:
+            parts = pair.split('=')
+            if len(parts) == 2:
+                layer_range, url = parts
+                start, end = map(int, layer_range.split(':'))
+                layer_url_map.append(url)
+    except ValueError as e:
+        logging.error(f"Error parsing layer URL mapping: {e}")
+        raise
 
     return layer_url_map
 
-def load_transformer_components(model_path, device_type):
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    pretrained_transformer = load_full_model(config, model_type)
-
-    if model_type == "gpt2":
-        wte = load_pretrained_embedding(model_path,"gpt2", "wte").eval().to(device_type)
-        wpe = load_pretrained_embedding(model_path, "gpt2",  "wpe").eval().to(device_type)
-        lm_head = load_pretrained_embedding(model_path, "gpt2",  "lm_head").eval().to(device_type)
-        ln_f = load_pretrained_embedding(model_path, "gpt2", "ln_f").eval().to(device_type)
-        return wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer
-    if model_type == "llama":
-        embed_tokens = load_pretrained_embedding(model_path, "llama",  "embed_tokens").eval().to(device_type)
-        lm_head = load_pretrained_embedding(model_path, "llama",  "lm_head").eval().to(device_type)
-        norm = load_pretrained_embedding(model_path, "llama", "norm").eval().to(device_type)
-        return embed_tokens, lm_head, norm, tokenizer, pretrained_transformer
-
-    
-
-
-
-def generate_text(prompt, max_len, transformer_components, layer_url_map):
-    if model_type == "gpt2":
-        wte, wpe, lm_head, ln_f, tokenizer, pretrained_transformer = transformer_components
-    elif model_type == "llama":
-        embed_tokens, lm_head, norm, tokenizer, pretrained_transformer = transformer_components
+def generate_text(prompt, max_len, transformer_components, pretrained_transformer, tokenizer, lm_head, layer_url_map):
+    """function for generating text based on prompt using model components."""
     input_ids = tokenizer.encode(prompt, return_tensors="pt", max_length=max_len).to(device_type)
 
     with torch.no_grad():
         for _ in range(max_len):
-            if model_type == "gpt2":
-                transformer_outputs = pretrained_transformer(input_ids=input_ids, wte=wte, wpe=wpe, ln_f=ln_f, layer_url_map=layer_url_map, device_type=device_type)
-            elif model_type == "llama":
-                transformer_outputs = pretrained_transformer(input_ids=input_ids, embed_tokens=embed_tokens, norm=norm, layer_url_map=layer_url_map, device_type=device_type)
+            transformer_outputs = pretrained_transformer(input_ids=input_ids, transformer_components=transformer_components, layer_url_map=layer_url_map, device_type=device_type)
             logits = transformer_outputs[0]
             logits = lm_head(logits)
             next_token = torch.argmax(logits[:, -1, :])
@@ -78,21 +56,33 @@ def generate_text(prompt, max_len, transformer_components, layer_url_map):
 
 @app.route('/generate', methods=['POST'])
 def generate_endpoint():
-    data = request.get_json()
-    prompt = data['prompt']
-    max_len = data['max_len']
+    """Endpoint for generating text based on a provided prompt and other parameters."""
+    try:
+        data = request.get_json(force=True)
+        prompt = data.get('prompt', '')
+        max_len = int(data.get('max_len', 50))
+        if not prompt or max_len <= 0:
+            raise ValueError("Invalid input parameters.")
+        
+        return generate_text(prompt, max_len, transformer_components, pretrained_transformer, tokenizer, lm_head, layer_url_map)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
-    return generate_text(prompt, max_len, transformer_components, layer_url_map)
-
+def configure_app():
+    """Configures Flask application settings."""
+    app.config['DEBUG'] = False  # Set to True for debugging, False for production
 
 if __name__ == '__main__':
+    configure_app()
     args = parse_arguments()
-    layer_url_map = parse_layer_url_mapping(args.layer_url_mapping)
-    device_type = args.device
-    model_path = args.model
-    config = AutoConfig.from_pretrained(model_path)
-    model_type = detect_language_model_family(config)
-    transformer_components = load_transformer_components(model_path, device_type)
-   
+    try:
+        layer_url_map = parse_layer_url_mapping(args.layer_url_mapping)
+        device_type = args.device
+        model_path = args.model
+        config = AutoConfig.from_pretrained(model_path)
+        model_type = detect_language_model_family(config)
+        transformer_components, pretrained_transformer, tokenizer, lm_head = load_transformer_components(model_path, device_type, model_type, config)
 
-    app.run(host='0.0.0.0', port=7002)
+        app.run(host='0.0.0.0', port=args.port)
+    except Exception as e:
+        logging.error(f"Application failed to start: {e}")

@@ -71,7 +71,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
-
+ 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -936,7 +936,7 @@ class LlamaModel(LlamaPreTrainedModel):
     def forward(
         self,
         layer_url_map,
-        norm, embed_tokens,device_type,
+        transformer_components,device_type,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -948,6 +948,7 @@ class LlamaModel(LlamaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        embed_tokens, norm = transformer_components
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

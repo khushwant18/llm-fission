@@ -5,13 +5,13 @@ if [ "$USER_TYPE" = "client" ]; then
     IFS=',' read -ra layer_url_mappings <<< "$LAYER_URL_MAPPING"
 
     # Execute Python script with arguments
-    exec python /app/docker/docker_test/client.py --layer_url_mapping "${layer_url_mappings[@]}" --device $DEVICE --model $REPO
+    exec python /app/docker/docker_test/client.py --layer_url_mapping "${layer_url_mappings[@]}" --device $DEVICE --model $REPO --port $PORT
 elif [ "$USER_TYPE" = "server" ]; then
     # IFS=':' read -ra layers <<< "$LAYERS"
     # layer_ids=($(seq ${layers[0]} ${layers[1]}))
 
     # Execute Python script with arguments
-    exec python /app/docker/docker_test/server.py --layers $LAYERS --device $DEVICE --model $REPO
+    exec python /app/docker/docker_test/server.py --layers $LAYERS --device $DEVICE --model $REPO --port $PORT
 else
     echo "Invalid USER_TYPE specified"
     exit 1

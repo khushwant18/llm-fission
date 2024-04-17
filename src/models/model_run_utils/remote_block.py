@@ -19,7 +19,6 @@ def process_hidden_states(layer_url_map, hidden_states, device_type,cache_positi
         cache_position = cache_position.detach().cpu().numpy().tolist()
         position_ids = position_ids.detach().cpu().numpy().tolist()
    
-
     for url in layer_url_map:
         try:
             # Send an HTTP POST request with the current hidden states data

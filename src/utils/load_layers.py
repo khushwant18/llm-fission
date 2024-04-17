@@ -20,7 +20,7 @@ from transformers import PretrainedConfig
 from transformers.utils import get_file_from_repo
 
 from transformers import AutoConfig
-from utils.model_type import detect_language_model_family, load_model, get_block_prefix, get_embedding_layer
+from utils.model_type import detect_language_model_family, load_model_block, get_block_prefix, get_embedding_layer
 
 StateDict = Dict[str, torch.Tensor]
 
@@ -261,7 +261,7 @@ def load_pretrained_block(
 
     # with init_empty_weights():
     model_type = detect_language_model_family(config)
-    block = load_model(config, model_type,block_index)
+    block = load_model_block(config, model_type,block_index)
     block_prefix = get_block_prefix(block_index, model_type)
     # block_prefix = f"{config.block_prefix}.{block_index}."
     # print("block_prefix",block_prefix)

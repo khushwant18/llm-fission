@@ -766,8 +766,7 @@ class GPT2Model(GPT2PreTrainedModel):
     )
     def forward(
         self,
-        ln_f,
-        wte,wpe,layer_url_map, device_type,
+        transformer_components, layer_url_map, device_type,
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
@@ -782,6 +781,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        wte, wpe, ln_f = transformer_components
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -7,6 +7,7 @@ from utils.load_layers import load_pretrained_block
 from utils.model_type import detect_language_model_family
 from models.llama.custom_modeling_llama import LlamaModel
 from transformers import AutoConfig
+from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,7 +43,9 @@ def load_blocks(model_path: str, layers: List[str], device_type: str) -> List[to
 
 def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor, 
                    model_type: str, cache_position: Optional[torch.Tensor] = None, 
-                   position_ids: Optional[torch.Tensor] = None) -> List:
+                   position_ids: Optional[torch.Tensor] = None,
+                   batch_size=None,
+                   seq_length=None) -> List:
     """
     Process blocks with the given hidden states.
     Args:
@@ -77,6 +80,22 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
                     use_cache=True,
                     cache_position=cache_position)
             hidden_states = outputs[0]
+    elif model_type == "mistral":
+        attention_mask = _prepare_4d_causal_attention_mask(
+                None,
+                (batch_size, seq_length),
+                hidden_states,
+                0,
+                sliding_window=config.sliding_window,
+            )
+        for block in blocks:
+            outputs = block(hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=None,
+                    output_attentions=False,
+                    use_cache=False)
+            hidden_states = outputs[0]
 
     # Example placeholder return, replace with actual processing result
     return hidden_states.to('cpu').detach().numpy().tolist()
@@ -93,10 +112,12 @@ def process_request():
     hidden_states = torch.tensor(data.get('hidden_states')).to(device_type)
 
     # Optional fields
+    batch_size = torch.tensor(data.get('batch_size')).to(device_type) if data.get('batch_size') else None
+    seq_length = torch.tensor(data.get('seq_length')).to(device_type) if data.get('seq_length') else None
     position_ids = torch.tensor(data.get('position_ids')).to(device_type) if data.get('position_ids') else None
     cache_position = torch.tensor(data.get('cache_position')).to(device_type) if data.get('cache_position') else None
 
-    processed_states = process_blocks(blocks, hidden_states, model_type, cache_position, position_ids)
+    processed_states = process_blocks(blocks, hidden_states, model_type, cache_position, position_ids,batch_size,seq_length)
     return jsonify({"res": processed_states})
 
 if __name__ == '__main__':
@@ -115,6 +136,7 @@ if __name__ == '__main__':
         exit(1)
     if model_type == "llama":
         llama=LlamaModel(config) 
+ 
     logging.info(f"Deploying layers: {layers}")
     blocks = load_blocks(model_path, layers, device_type)
 

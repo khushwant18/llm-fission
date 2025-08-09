@@ -6,8 +6,10 @@ from typing import List, Optional
 from utils.load_layers import load_pretrained_block
 from utils.model_type import detect_language_model_family
 from models.llama.custom_modeling_llama import LlamaModel
+from models.gpt_oss.custom_modeling_gpt_oss import GptOssModel
 from transformers import AutoConfig
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,6 +98,29 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
                     output_attentions=False,
                     use_cache=False)
             hidden_states = outputs[0]
+    elif model_type == "gpt_oss":
+        # Use existing import
+        attention_mask = _prepare_4d_causal_attention_mask(
+            None,
+            (batch_size, seq_length),
+            hidden_states,
+            0,
+            sliding_window=getattr(config, 'sliding_window', None),
+        )
+        
+        # Get position embeddings  
+        position_embeddings = gpt_oss.rotary_emb(hidden_states, position_ids)
+        
+        for block in blocks:
+            hidden_states = block(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=None,
+                use_cache=False,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
 
     # Example placeholder return, replace with actual processing result
     return hidden_states.to('cpu').detach().numpy().tolist()
@@ -136,6 +161,8 @@ if __name__ == '__main__':
         exit(1)
     if model_type == "llama":
         llama=LlamaModel(config) 
+    elif model_type == "gpt_oss":
+        gpt_oss = GptOssModel(config)  
  
     logging.info(f"Deploying layers: {layers}")
     blocks = load_blocks(model_path, layers, device_type)

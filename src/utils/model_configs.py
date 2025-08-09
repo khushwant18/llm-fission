@@ -3,6 +3,7 @@
 from torch import nn
 from models.llama.custom_modeling_llama import LlamaRMSNorm
 from models.mistral.custom_modeling_mistral import MistralRMSNorm
+from models.gpt_oss.custom_modeling_gpt_oss import GptOssRMSNorm
 
 #configuration builder for GPT2
 def get_gpt2_embedding_configs(config, embed_dim):
@@ -25,6 +26,13 @@ def get_mistral_embedding_configs(config):
     return {
         "embed_tokens": {"class": nn.Embedding, "params": {"num_embeddings": config.vocab_size, "embedding_dim": config.hidden_size, "padding_idx": config.pad_token_id}, "prefix": "model.embed_tokens"},
         "norm": {"class": MistralRMSNorm, "params": {"hidden_size": config.hidden_size, "eps": config.rms_norm_eps}, "prefix": "model.norm"}, 
+        "lm_head": {"class": nn.Linear, "params": {"in_features": config.hidden_size, "out_features": config.vocab_size, "bias": False}, "prefix": "lm_head"},
+    }
+
+def get_gpt_oss_embedding_configs(config):
+    return {
+        "embed_tokens": {"class": nn.Embedding, "params": {"num_embeddings": config.vocab_size, "embedding_dim": config.hidden_size, "padding_idx": config.pad_token_id}, "prefix": "model.embed_tokens"},
+        "norm": {"class": GptOssRMSNorm, "params": {"hidden_size": config.hidden_size, "eps": config.rms_norm_eps}, "prefix": "model.norm"}, 
         "lm_head": {"class": nn.Linear, "params": {"in_features": config.hidden_size, "out_features": config.vocab_size, "bias": False}, "prefix": "lm_head"},
     }
  

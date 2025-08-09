@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from utils.transformer_components import load_transformer_components
 from utils.model_type import detect_language_model_family
 from models.gpt2.custom_modeling_gpt2 import GPT2Model
+from models.gpt_oss.custom_modeling_gpt_oss import GptOssModel
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)

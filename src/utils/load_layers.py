@@ -17,7 +17,7 @@ import torch.nn as nn
 from huggingface_hub import get_hf_file_metadata, hf_hub_url
 from huggingface_hub.utils import EntryNotFoundError
 from transformers import PretrainedConfig
-from transformers.utils import get_file_from_repo
+from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig
 from utils.model_type import detect_language_model_family, load_model_block, get_block_prefix, get_embedding_layer
@@ -39,7 +39,7 @@ def _load_state_dict_from_repo(
 
     index_file = _find_index_file(model_name, revision=revision, token=token, cache_dir=cache_dir)
     if index_file.endswith(".index.json"):  # Sharded model
-        path = get_file_from_repo(model_name, filename=index_file, use_auth_token=token, cache_dir=cache_dir)
+        path = hf_hub_download(model_name, filename=index_file, token=token, cache_dir=cache_dir, repo_type="model")
         if path is None:
             # _find_index_file() told that a file exists but we can't get it (e.g., it just disappeared)
             raise ValueError(f"Failed to get file {index_file}")
@@ -84,13 +84,14 @@ def _find_index_file(
 ) -> str:
     # If we have cached weights (e.g., Pickle from older Petals versions), reuse them
     for filename in INDEX_FILES:
-        path = get_file_from_repo(
+        path = hf_hub_download(
             model_name,
             filename,
             revision=revision,
-            use_auth_token=token,
+            token=token,
             cache_dir=cache_dir,
             local_files_only=True,
+            repo_type="model"
         )
         if path is not None:
             return filename
@@ -122,13 +123,14 @@ def _load_state_dict_from_repo_file(
     try:
         # with allow_cache_reads(cache_dir):
             # print("see",model_name,filename,revision,token,cache_dir)
-            path = get_file_from_repo(
+            path = hf_hub_download(
                 model_name,
                 filename,
                 revision=revision,
-                use_auth_token=token,
+                token=token,
                 cache_dir=cache_dir,
                 local_files_only=True,
+                 repo_type="model"
             )
             # print("path..",path)
             if path is not None:
@@ -148,13 +150,14 @@ def _load_state_dict_from_repo_file(
                 # else:
                 #     logger.warning(f"Failed to fetch size of file {filename} from repo {model_name}")
 
-                path = get_file_from_repo(
+                path = hf_hub_download(
                     model_name,
                     filename,
                     revision=revision,
-                    use_auth_token=token,
+                    token=token,
                     cache_dir=cache_dir,
                     local_files_only=False,
+                    repo_type="model"
                 )
                 if path is None:
                     raise RuntimeError(f"File {filename} does not exist in repo {model_name}")

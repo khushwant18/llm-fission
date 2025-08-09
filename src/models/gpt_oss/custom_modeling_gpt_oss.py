@@ -21,17 +21,18 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...cache_utils import Cache, DynamicCache
-from ...integrations.hub_kernels import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import (
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.integrations.hub_kernels import use_kernel_forward_from_hub
+from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from transformers.modeling_outputs import (
     MoeModelOutputWithPast,
     MoeCausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
-from ...utils import (
+from transformers.modeling_rope_utils import dynamic_rope_update
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+from transformers.processing_utils import Unpack
+from transformers.utils import (
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -39,17 +40,17 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
-from ..llama.modeling_llama import (
+from transformers.utils.generic import OutputRecorder, check_model_inputs
+from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
-from ..qwen2.modeling_qwen2 import Qwen2Attention
-from .configuration_gpt_oss import GptOssConfig
+from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from transformers.models.qwen2.modeling_qwen2 import Qwen2Attention
+from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
 
 logger = logging.get_logger(__name__)
 

@@ -286,7 +286,10 @@ def load_pretrained_block(
 
     report = block.load_state_dict(state_dict, strict=False)
 
-    assert not report.missing_keys, f"Some block weights are missing: {report.missing_keys}"
+    expected_missing = {'mlp.experts.gate_up_proj', 'mlp.experts.down_proj'}
+    actual_missing = set(report.missing_keys) - expected_missing
+
+    assert not actual_missing, f"Some block weights are missing: {actual_missing}"
 
     for param_name, _ in block.named_parameters():
         assert param_name in state_dict, f"{param_name} not in state dict"

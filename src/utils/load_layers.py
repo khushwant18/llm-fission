@@ -292,6 +292,19 @@ def load_pretrained_block(
     assert not actual_missing, f"Some block weights are missing: {actual_missing}"
 
     for param_name, _ in block.named_parameters():
+        # Skip quantized MLP params that don't exist in standard form
+        if param_name in ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']:
+            # Check quantized versions exist instead
+            base = param_name.replace('.gate_up_proj', '').replace('.down_proj', '')
+            proj_type = 'gate_up_proj' if 'gate_up' in param_name else 'down_proj'
+            quantized_keys = [f'{proj_type}_blocks', f'{proj_type}_scales', f'{proj_type}_bias']
+            
+            for qkey in quantized_keys:
+                full_key = f"{base}.{qkey}"
+                if full_key not in state_dict:
+                    raise AssertionError(f"Missing quantized weight: {full_key}")
+            continue  # Skip standard weight check
+        
         assert param_name in state_dict, f"{param_name} not in state dict"
         param = state_dict[param_name]
         # if not str(param.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):

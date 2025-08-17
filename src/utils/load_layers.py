@@ -269,7 +269,7 @@ def load_pretrained_block(
     block = load_model_block(config, model_type,block_index)
     block_prefix = get_block_prefix(block_index, model_type)
     # block_prefix = f"{config.block_prefix}.{block_index}."
-    # print("block_prefix",block_prefix)
+    print("block_prefix.........",block_prefix)
     
     state_dict = _load_state_dict_from_repo(
         model_name,

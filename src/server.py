@@ -26,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--port', type=int, default=5000, help='Port number for the API.')
     return parser.parse_args()
 
-def load_blocks(model_path: str, layers: List[str], device_type: str) -> List[torch.nn.Module]:
+def load_blocks(model_path: str, layers: List[str], device_type: str, config: None) -> List[torch.nn.Module]:
     """
     Load specified blocks of the model.
     Args:
@@ -37,7 +37,7 @@ def load_blocks(model_path: str, layers: List[str], device_type: str) -> List[to
         List of loaded model blocks.
     """
     try:
-        blocks = [load_pretrained_block(model_path, b).eval().to(device_type) for b in layers]
+        blocks = [load_pretrained_block(model_path, b, config=config).eval().to(device_type) for b in layers]
     except Exception as e:
         logging.error(f"Failed to load blocks: {e}")
         raise
@@ -171,6 +171,6 @@ if __name__ == '__main__':
         # gpt_oss = GptOssModel(config)  
  
     logging.info(f"Deploying layers: {layers}")
-    blocks = load_blocks(model_path, layers, device_type)
+    blocks = load_blocks(model_path, layers, device_type, config)
 
     app.run(host='0.0.0.0', port=args.port)

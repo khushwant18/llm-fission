@@ -13,14 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PyTorch GptOss model."""
+"""PyTorch GptOss model with distributed layer loading."""
 
 from typing import Callable, Optional, Union, List, Tuple
-
 import torch
 from torch import nn
 from torch.nn import functional as F
-
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.integrations.hub_kernels import use_kernel_forward_from_hub
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -30,7 +28,6 @@ from transformers.modeling_outputs import (
 )
 from transformers.modeling_rope_utils import dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
-
 from transformers.processing_utils import Unpack
 from transformers.utils import (
     TransformersKwargs,
@@ -50,6 +47,7 @@ from transformers.models.llama.modeling_llama import (
 from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
 from transformers.models.qwen2.modeling_qwen2 import Qwen2Attention
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
+from ..model_run_utils.remote_block import process_hidden_states
 
 logger = logging.get_logger(__name__)
 
@@ -125,7 +123,7 @@ class GptOssRMSNorm(LlamaRMSNorm):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 class GptOssExperts(nn.Module):
@@ -143,30 +141,17 @@ class GptOssExperts(nn.Module):
         self.limit = 7.0
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
-        """
-        When training it is more efficient to just loop over the experts and compute the output for each expert
-        as otherwise the memory would explode.
-
-        For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
-
-        Args:
-            hidden_states (torch.Tensor): (batch_size, seq_len, hidden_size)
-            router_indices (torch.Tensor): (batch_size * token_num, top_k)
-            routing_weights (torch.Tensor): (batch_size * token_num, num_experts)
-        Returns:
-            torch.Tensor
-        """
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
         num_experts = routing_weights.shape[1]
+        
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
                 expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
                 expert_mask = expert_mask.permute(2, 1, 0)
-                # we sum on the top_k and on the sequence lenght to get which experts
-                # are hit this time around
                 expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+                
             for expert_idx in expert_hit[:]:
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx[0]])
@@ -208,8 +193,8 @@ class GptOssTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight, self.bias)  # (seq_len, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_logits = F.linear(hidden_states, self.weight, self.bias)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         return router_scores, router_indices
@@ -223,20 +208,20 @@ class GptOssMLP(nn.Module):
         self.experts = GptOssExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
+        router_scores, router_indices = self.router(hidden_states)
         routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
         return routed_out, router_scores
 
 
 class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    @dynamic_rope_update
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
             cos = emb.cos() * self.attention_scaling
@@ -284,11 +269,9 @@ def eager_attention_forward(
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
 
-    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
-    # when training with bsz>1 we clamp max values.
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # we drop the sink here
+    scores = probs[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -348,7 +331,7 @@ class GptOssAttention(Qwen2Attention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=getattr(self, 'sliding_window', None),
-            s_aux=self.sinks,  # diff with Llama
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -375,12 +358,12 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
+        
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -393,10 +376,9 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.mlp(hidden_states)  # diff with llama: router scores
+        hidden_states, _ = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -449,6 +431,110 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
             module.bias.data.normal_(mean=0.0, std=std)
 
 
+# Layer loading functions
+def load_gptoss_layer(
+    model_name: str,
+    layer_idx: int,
+    *,
+    config: Optional[GptOssConfig] = None,
+    torch_dtype: Union[torch.dtype, str] = "auto",
+    revision: Optional[str] = None,
+    token: Optional[Union[str, bool]] = None,
+    cache_dir: Optional[str] = None,
+    max_disk_space: Optional[int] = None,
+) -> nn.Module:
+    """Load a specific GptOss layer from HuggingFace Hub."""
+    if config is None:
+        config = GptOssConfig.from_pretrained(model_name)
+    
+    layer = GptOssDecoderLayer(config, layer_idx)
+    layer_prefix = f"model.layers.{layer_idx}."
+    
+    from .layer_loading import _load_state_dict_from_repo  # Import from GPT-2 loading code
+    
+    state_dict = _load_state_dict_from_repo(
+        model_name,
+        layer_prefix,
+        revision=revision,
+        token=token,
+        cache_dir=cache_dir,
+        max_disk_space=max_disk_space,
+    )
+    
+    # Remove prefix from keys
+    state_dict = {key[len(layer_prefix):]: value for key, value in state_dict.items()}
+    
+    report = layer.load_state_dict(state_dict, strict=False)
+    assert not report.missing_keys, f"Some layer weights are missing: {report.missing_keys}"
+    
+    return layer
+
+
+def load_gptoss_embedding(
+    model_name: str,
+    emb_type: str,  # "input" or "output"
+    *,
+    config: Optional[GptOssConfig] = None,
+    revision: Optional[str] = None,
+    token: Optional[Union[str, bool]] = None,
+    cache_dir: Optional[str] = None,
+    max_disk_space: Optional[int] = None,
+) -> nn.Module:
+    """Load GptOss embedding layers."""
+    if config is None:
+        config = GptOssConfig.from_pretrained(model_name)
+    
+    from .layer_loading import _load_state_dict_from_repo
+    
+    if emb_type == "input":
+        embedding = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        prefix = "model.embed_tokens."
+    elif emb_type == "output":
+        embedding = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        prefix = "lm_head."
+    else:
+        raise ValueError(f"Unknown embedding type: {emb_type}")
+    
+    state_dict = _load_state_dict_from_repo(
+        model_name, prefix, revision=revision, token=token, 
+        cache_dir=cache_dir, max_disk_space=max_disk_space
+    )
+    
+    state_dict = {key[len(prefix):]: value for key, value in state_dict.items()}
+    embedding.load_state_dict(state_dict, strict=False)
+    
+    return embedding
+
+
+def load_gptoss_norm(
+    model_name: str,
+    *,
+    config: Optional[GptOssConfig] = None,
+    revision: Optional[str] = None,
+    token: Optional[Union[str, bool]] = None,
+    cache_dir: Optional[str] = None,
+    max_disk_space: Optional[int] = None,
+) -> nn.Module:
+    """Load GptOss normalization layer."""
+    if config is None:
+        config = GptOssConfig.from_pretrained(model_name)
+    
+    from .layer_loading import _load_state_dict_from_repo
+    
+    norm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    prefix = "model.norm."
+    
+    state_dict = _load_state_dict_from_repo(
+        model_name, prefix, revision=revision, token=token,
+        cache_dir=cache_dir, max_disk_space=max_disk_space
+    )
+    
+    state_dict = {key[len(prefix):]: value for key, value in state_dict.items()}
+    norm.load_state_dict(state_dict, strict=False)
+    
+    return norm
+
+
 @add_start_docstrings(
     "The bare GptOss Model outputting raw hidden-states without any specific head on top.",
     GPTOSS_START_DOCSTRING,
@@ -461,15 +547,15 @@ class GptOssModel(MixtralModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        # Replace layers with placeholders for distributed loading
+        self.layers = ["0"] * config.num_hidden_layers
+        
+        # Keep only non-layer components for local initialization
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [GptOssDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.norm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GptOssRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -482,6 +568,9 @@ class GptOssModel(MixtralModel):
     @add_start_docstrings_to_model_forward(GPTOSS_INPUTS_DOCSTRING)
     def forward(
         self,
+        transformer_components,
+        layer_url_map, 
+        device_type,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -495,25 +584,11 @@ class GptOssModel(MixtralModel):
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[Tuple, MoeModelOutputWithPast]:
-        """
-        Forward pass for GptOss model.
+        """Forward pass with distributed layer processing."""
         
-        Args:
-            input_ids: Input token IDs
-            attention_mask: Attention mask 
-            position_ids: Position IDs
-            past_key_values: Past key values for caching
-            inputs_embeds: Input embeddings
-            use_cache: Whether to use caching
-            output_attentions: Whether to output attentions
-            output_hidden_states: Whether to output hidden states
-            output_router_logits: Whether to output router logits
-            cache_position: Cache position
-            return_dict: Whether to return dict
-            
-        Returns:
-            Model outputs
-        """
+        # Unpack transformer components
+        embed_tokens, norm, rotary_emb = transformer_components
+        
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -521,7 +596,7 @@ class GptOssModel(MixtralModel):
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = embed_tokens(input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -531,7 +606,7 @@ class GptOssModel(MixtralModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
+        # Create attention masks if needed
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -546,32 +621,17 @@ class GptOssModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = rotary_emb(hidden_states, position_ids)
 
-        # Collect router logits if needed
-        all_router_logits = () if output_router_logits else None
+        # Process layers remotely instead of locally
+        hidden_states = process_hidden_states(layer_url_map, hidden_states, device_type)
 
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-            
-            # TODO: Collect router logits from MLP if needed
-            # This would require modifying the decoder layer forward to return router logits
-
-        hidden_states = self.norm(hidden_states)
+        hidden_states = norm(hidden_states)
         
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            router_logits=all_router_logits,
+            router_logits=None,  # Would need to be collected from remote processing
         )
 
 
@@ -595,7 +655,6 @@ class GptOssForCausalLM(MixtralForCausalLM):
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -732,28 +791,21 @@ class GptOssForCausalLM(MixtralForCausalLM):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
     ):
         """Prepare inputs for generation (beam search, etc.)"""
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None:
                 input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+            elif input_ids.shape[1] != cache_position.shape[0]:
                 input_ids = input_ids[:, cache_position]
 
         if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a C-contiguous tensor, which is required for the fast
-            # path of the Torch matmul operator
             model_inputs = {"input_ids": input_ids.contiguous()}
 
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
@@ -785,7 +837,6 @@ class GptOssForCausalLM(MixtralForCausalLM):
         return reordered_past
 
 
-# Optional: Add sequence classification variant
 @add_start_docstrings(
     """
     The GptOss Model transformer with a sequence classification head on top (linear layer).
@@ -808,7 +859,6 @@ class GptOssForSequenceClassification(GptOssPreTrainedModel):
         self.model = GptOssModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -866,7 +916,6 @@ class GptOssForSequenceClassification(GptOssPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
                 sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
                 sequence_lengths = sequence_lengths.to(logits.device)
@@ -913,9 +962,58 @@ class GptOssForSequenceClassification(GptOssPreTrainedModel):
         )
 
 
+# Usage example functions
+def setup_distributed_gptoss(model_name: str, layer_url_map: dict, device_type: str = "cuda"):
+    """
+    Setup a distributed GptOss model for inference.
+    
+    Args:
+        model_name: HuggingFace model name/path
+        layer_url_map: Mapping of layer indices to remote URLs
+        device_type: Device type for local components
+        
+    Returns:
+        Tuple of (model, transformer_components)
+    """
+    config = GptOssConfig.from_pretrained(model_name)
+    model = GptOssForCausalLM(config)
+    
+    # Load local components
+    embed_tokens = load_gptoss_embedding(model_name, "input")
+    norm = load_gptoss_norm(model_name)
+    rotary_emb = GptOssRotaryEmbedding(config)
+    
+    transformer_components = (embed_tokens, norm, rotary_emb)
+    
+    return model, transformer_components
+
+
+def load_specific_gptoss_layers(model_name: str, layer_indices: List[int]):
+    """
+    Load specific GptOss layers for local processing.
+    
+    Args:
+        model_name: HuggingFace model name/path
+        layer_indices: List of layer indices to load
+        
+    Returns:
+        Dict mapping layer indices to loaded layers
+    """
+    layers = {}
+    for idx in layer_indices:
+        layers[idx] = load_gptoss_layer(model_name, idx)
+    return layers
+
+
 __all__ = [
     "GptOssForCausalLM",
-    "GptOssForSequenceClassification",
+    "GptOssForSequenceClassification", 
     "GptOssModel",
     "GptOssPreTrainedModel",
+    "GptOssDecoderLayer",
+    "load_gptoss_layer",
+    "load_gptoss_embedding",
+    "load_gptoss_norm",
+    "setup_distributed_gptoss",
+    "load_specific_gptoss_layers",
 ]

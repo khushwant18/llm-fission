@@ -129,7 +129,7 @@ def _load_state_dict_from_repo_file(
                 revision=revision,
                 token=token,
                 cache_dir=cache_dir,
-                local_files_only=False
+                local_files_only=False,
                  repo_type="model"
             )
             # print("path..",path)

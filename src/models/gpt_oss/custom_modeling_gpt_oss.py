@@ -539,7 +539,7 @@ def load_gptoss_norm(
     "The bare GptOss Model outputting raw hidden-states without any specific head on top.",
     GPTOSS_START_DOCSTRING,
 )
-class GptOssModel(MixtralModel):
+class GptOssModel(GptOssPreTrainedModel): 
     _no_split_modules = ["GptOssDecoderLayer"]
 
     def __init__(self, config: GptOssConfig):

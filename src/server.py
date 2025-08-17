@@ -9,7 +9,7 @@ from models.llama.custom_modeling_llama import LlamaModel
 from models.gpt_oss.custom_modeling_gpt_oss import GptOssModel
 from transformers import AutoConfig
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-
+from pyngrok import ngrok
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -165,12 +165,13 @@ if __name__ == '__main__':
         config.router_jitter_noise = 0.0  
         config.mlp_bias = False
         from models.gpt_oss.custom_modeling_gpt_oss import GptOssRotaryEmbedding
-        print("here 1.....")
         gpt_oss_rotary = GptOssRotaryEmbedding(config=config)
-        print("here 2...")
+
         # gpt_oss = GptOssModel(config)  
  
     logging.info(f"Deploying layers: {layers}")
     blocks = load_blocks(model_path, layers, device_type, config)
 
+    public_url = ngrok.connect(args.port)
+    print(f" * ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{args.port}\"")
     app.run(host='0.0.0.0', port=args.port)

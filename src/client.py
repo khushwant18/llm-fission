@@ -8,6 +8,7 @@ from utils.transformer_components import load_transformer_components
 from utils.model_type import detect_language_model_family
 from models.gpt2.custom_modeling_gpt2 import GPT2Model
 from models.gpt_oss.custom_modeling_gpt_oss import GptOssModel
+from pyngrok import ngrok
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +86,8 @@ if __name__ == '__main__':
         model_type = detect_language_model_family(config)
         transformer_components, pretrained_transformer, tokenizer, lm_head = load_transformer_components(model_path, device_type, model_type, config)
 
+        public_url = ngrok.connect(args.port)
+        print(f" * ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{args.port}\"")
         app.run(host='0.0.0.0', port=args.port)
     except Exception as e:
         logging.error(f"Application failed to start: {e}")

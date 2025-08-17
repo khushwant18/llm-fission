@@ -109,7 +109,7 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
         )
         
         # Get position embeddings  
-        position_embeddings = gpt_oss.rotary_emb(hidden_states, position_ids)
+        position_embeddings = gpt_oss_rotary(hidden_states, position_ids)
         
         for block in blocks:
             hidden_states = block(
@@ -163,7 +163,11 @@ if __name__ == '__main__':
         llama=LlamaModel(config) 
     elif model_type == "gpt_oss":
         config.router_jitter_noise = 0.0  
-        gpt_oss = GptOssModel(config)  
+        from models.gpt_oss.custom_modeling_gpt_oss import GptOssRotaryEmbedding
+        print("here 1.....")
+        gpt_oss_rotary = GptOssRotaryEmbedding(config=config)
+        print("here 2...")
+        # gpt_oss = GptOssModel(config)  
  
     logging.info(f"Deploying layers: {layers}")
     blocks = load_blocks(model_path, layers, device_type)

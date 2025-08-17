@@ -50,6 +50,7 @@ from transformers.models.llama.modeling_llama import (
 from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
 from transformers.models.qwen2.modeling_qwen2 import Qwen2Attention
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
+from ..model_run_utils.remote_block import process_hidden_states
 
 logger = logging.get_logger(__name__)
 
@@ -462,9 +463,9 @@ class GptOssModel(MixtralModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [GptOssDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        # self.layers = nn.ModuleList(
+        #     [GptOssDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        # )
         self.norm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GptOssRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -482,6 +483,8 @@ class GptOssModel(MixtralModel):
     @add_start_docstrings_to_model_forward(GPTOSS_INPUTS_DOCSTRING)
     def forward(
         self,
+        layer_url_map,
+        transformer_components,device_type,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -546,22 +549,25 @@ class GptOssModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # Collect router logits if needed
         all_router_logits = () if output_router_logits else None
 
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids)
+        
+
+        # for decoder_layer in self.layers:
+        #     hidden_states = decoder_layer(
+        #         hidden_states,
+        #         attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+        #         position_ids=position_ids,
+        #         past_key_value=past_key_values,
+        #         use_cache=use_cache,
+        #         cache_position=cache_position,
+        #         position_embeddings=position_embeddings,
+        #         **kwargs,
+        #     )
             
             # TODO: Collect router logits from MLP if needed
             # This would require modifying the decoder layer forward to return router logits

@@ -83,6 +83,8 @@ if __name__ == '__main__':
         device_type = args.device
         model_path = args.model
         config = AutoConfig.from_pretrained(model_path)
+        config.router_jitter_noise = 0.0  
+        config.mlp_bias = False
         model_type = detect_language_model_family(config)
         transformer_components, pretrained_transformer, tokenizer, lm_head = load_transformer_components(model_path, device_type, model_type, config)
 

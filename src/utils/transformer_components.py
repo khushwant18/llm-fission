@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer, AutoModel
 from utils.load_layers import load_pretrained_embedding
 from utils.model_type import load_full_model
-
+ 
 class TransformerComponents:
     def __init__(self, model_path, device_type,model_type,config):
         self.model_path = model_path

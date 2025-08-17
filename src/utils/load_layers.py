@@ -39,7 +39,7 @@ def _load_state_dict_from_repo(
 
     index_file = _find_index_file(model_name, revision=revision, token=token, cache_dir=cache_dir)
     if index_file.endswith(".index.json"):  # Sharded model
-        path = hf_hub_download(model_name, filename=index_file, token=token, cache_dir=cache_dir, repo_type="model")
+        path = hf_hub_download(model_name, filename=index_file, token=token, cache_dir=cache_dir, repo_type="model", local_files_only=False)
         if path is None:
             # _find_index_file() told that a file exists but we can't get it (e.g., it just disappeared)
             raise ValueError(f"Failed to get file {index_file}")
@@ -90,8 +90,8 @@ def _find_index_file(
             revision=revision,
             token=token,
             cache_dir=cache_dir,
-            local_files_only=True,
-            repo_type="model"
+            repo_type="model",
+            local_files_only=False
         )
         if path is not None:
             return filename
@@ -129,7 +129,7 @@ def _load_state_dict_from_repo_file(
                 revision=revision,
                 token=token,
                 cache_dir=cache_dir,
-                local_files_only=True,
+                local_files_only=False
                  repo_type="model"
             )
             # print("path..",path)

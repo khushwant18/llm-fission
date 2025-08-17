@@ -403,7 +403,7 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
         "hidden_states": GptOssDecoderLayer,
         "attentions": GptOssAttention,
     }
-    _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _keep_in_fp32_modules = ["norm"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -539,7 +539,7 @@ def load_gptoss_norm(
     "The bare GptOss Model outputting raw hidden-states without any specific head on top.",
     GPTOSS_START_DOCSTRING,
 )
-class GptOssModel(GptOssPreTrainedModel): 
+class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
     def __init__(self, config: GptOssConfig):

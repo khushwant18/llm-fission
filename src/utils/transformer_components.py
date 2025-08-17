@@ -37,6 +37,15 @@ class MistralComponents(TransformerComponents):
         self.norm = self.load_pretrained_embedding("mistral","norm")
         transformer_components = self.embed_tokens, self.norm
         return transformer_components, self.pretrained_transformer, self.tokenizer, self.lm_head
+    
+
+class GptOssComponents(TransformerComponents):
+    def load_components(self):
+        self.embed_tokens = self.load_pretrained_embedding("gpt_oss","embed_tokens")
+        self.lm_head = self.load_pretrained_embedding("gpt_oss","lm_head")
+        self.norm = self.load_pretrained_embedding("gpt_oss","norm")
+        transformer_components = self.embed_tokens, self.norm
+        return transformer_components, self.pretrained_transformer, self.tokenizer, self.lm_head
 
 def load_transformer_components(model_path, device_type, model_type,config):
     if model_type == "gpt2":
@@ -45,5 +54,7 @@ def load_transformer_components(model_path, device_type, model_type,config):
         return LlamaComponents(model_path, device_type, model_type, config).load_components()
     elif model_type == "mistral":
         return MistralComponents(model_path, device_type, model_type, config).load_components()
+    elif model_type == "gpt_oss":
+        return GptOssComponents(model_path, device_type, model_type, config).load_components()
     else:
         raise ValueError(f"Unsupported model type: {model_type}")

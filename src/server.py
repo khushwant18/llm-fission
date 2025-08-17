@@ -163,6 +163,7 @@ if __name__ == '__main__':
         llama=LlamaModel(config) 
     elif model_type == "gpt_oss":
         config.router_jitter_noise = 0.0  
+        config.mlp_bias = False
         from models.gpt_oss.custom_modeling_gpt_oss import GptOssRotaryEmbedding
         print("here 1.....")
         gpt_oss_rotary = GptOssRotaryEmbedding(config=config)

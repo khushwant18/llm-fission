@@ -340,7 +340,7 @@ class GptOssAttention(Qwen2Attention):
         return attn_output, attn_weights
 
 
-class GptOssDecoderLayer(LlamaDecoderLayer):
+class GptOssDecoderLayer(nn.Module):
     def __init__(self, config: GptOssConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size

@@ -36,8 +36,10 @@ def _load_state_dict_from_repo(
 ) -> StateDict:
     # if always_needs_auth(model_name) and token is None:
     #     token = True
-
+    # block_prefix = block_prefix+"."
+    print("cache_dir:  ",cache_dir)
     index_file = _find_index_file(model_name, revision=revision, token=token, cache_dir=cache_dir)
+    print("index_file: ", index_file)
     if index_file.endswith(".index.json"):  # Sharded model
         path = hf_hub_download(model_name, filename=index_file, token=token, cache_dir=cache_dir, repo_type="model", local_files_only=False)
         if path is None:
@@ -49,11 +51,12 @@ def _load_state_dict_from_repo(
         filenames = {
             filename for param_name, filename in index["weight_map"].items() if param_name.startswith(block_prefix)
         }
+        print("real file name: ", filenames)
         if not filenames:
             raise RuntimeError(f"Block {block_prefix}* not found in the index: {index['weight_map']}")
     else:  # Non-sharded model
         filenames = {index_file}
-    # logger.debug(f"Loading {block_prefix}* from {filenames}")
+    print(f"Loading {block_prefix}* from {filenames}")
 
     state_dict = {}
     for filename in filenames:
@@ -83,7 +86,7 @@ def _find_index_file(
 ) -> str:
     # If we have cached weights (e.g., Pickle from older Petals versions), reuse them
     files = list_repo_files(model_name)
-    INDEX_FILES = [f for f in files if f.endswith(('.safetensors', '.safetensors.index.json'))]
+    INDEX_FILES = [f for f in files if f.endswith(('.safetensors.index.json'))]
 
     for filename in INDEX_FILES:
         path = hf_hub_download(

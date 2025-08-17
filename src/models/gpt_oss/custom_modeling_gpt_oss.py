@@ -36,7 +36,6 @@ from transformers.utils import (
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    auto_docstring,
     logging,
     replace_return_docstrings,
 )
@@ -481,7 +480,6 @@ class GptOssModel(MixtralModel):
 
     @check_model_inputs
     @add_start_docstrings_to_model_forward(GPTOSS_INPUTS_DOCSTRING)
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -497,6 +495,25 @@ class GptOssModel(MixtralModel):
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[Tuple, MoeModelOutputWithPast]:
+        """
+        Forward pass for GptOss model.
+        
+        Args:
+            input_ids: Input token IDs
+            attention_mask: Attention mask 
+            position_ids: Position IDs
+            past_key_values: Past key values for caching
+            inputs_embeds: Input embeddings
+            use_cache: Whether to use caching
+            output_attentions: Whether to output attentions
+            output_hidden_states: Whether to output hidden states
+            output_router_logits: Whether to output router logits
+            cache_position: Cache position
+            return_dict: Whether to return dict
+            
+        Returns:
+            Model outputs
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

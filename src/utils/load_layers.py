@@ -14,7 +14,7 @@ import torch.nn as nn
 # from accelerate import init_empty_weights
 # from accelerate.utils import set_module_tensor_to_device
 # from hivemind.utils.logging import get_logger
-from huggingface_hub import get_hf_file_metadata, hf_hub_url
+from huggingface_hub import get_hf_file_metadata, hf_hub_url, list_repo_files
 from huggingface_hub.utils import EntryNotFoundError
 from transformers import PretrainedConfig
 from huggingface_hub import hf_hub_download
@@ -76,13 +76,15 @@ def _load_state_dict_from_repo(
     return state_dict
 
 
-INDEX_FILES = ["model.safetensors", "pytorch_model.bin"]
-
+# INDEX_FILES = ["model.safetensors", "pytorch_model.bin"]
 
 def _find_index_file(
     model_name: str, *, revision: Optional[str] = None, token: Optional[Union[str, bool]] = None, cache_dir: str
 ) -> str:
     # If we have cached weights (e.g., Pickle from older Petals versions), reuse them
+    files = list_repo_files(model_name)
+    INDEX_FILES = [f for f in files if f.endswith(('.safetensors'))]
+
     for filename in INDEX_FILES:
         path = hf_hub_download(
             model_name,

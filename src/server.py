@@ -162,6 +162,7 @@ if __name__ == '__main__':
     if model_type == "llama":
         llama=LlamaModel(config) 
     elif model_type == "gpt_oss":
+        config.router_jitter_noise = 0.0  
         gpt_oss = GptOssModel(config)  
  
     logging.info(f"Deploying layers: {layers}")

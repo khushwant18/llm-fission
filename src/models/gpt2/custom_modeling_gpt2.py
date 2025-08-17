@@ -14,6 +14,79 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
+from torch import nn
+class SequenceSummary(nn.Module):
+    """
+    Custom implementation of SequenceSummary to replace the deprecated one.
+    This class computes a summary of a sequence of hidden states.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.summary_type = getattr(config, 'summary_type', 'last')
+        self.summary_use_proj = getattr(config, 'summary_use_proj', True)
+        self.summary_activation = getattr(config, 'summary_activation', None)
+        self.summary_proj_to_labels = getattr(config, 'summary_proj_to_labels', True)
+        self.summary_first_dropout = getattr(config, 'summary_first_dropout', 0.1)
+        self.summary_last_dropout = getattr(config, 'summary_last_dropout', 0.1)
+        
+        if self.summary_use_proj:
+            if hasattr(config, 'summary_proj_to_labels') and self.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+        
+        # Activation function
+        if self.summary_activation:
+            self.activation = ACT2FN[self.summary_activation]
+        else:
+            self.activation = nn.Identity()
+        
+        # Dropout layers
+        self.first_dropout = nn.Dropout(self.summary_first_dropout) if self.summary_first_dropout > 0 else nn.Identity()
+        self.last_dropout = nn.Dropout(self.summary_last_dropout) if self.summary_last_dropout > 0 else nn.Identity()
+
+    def forward(self, hidden_states, cls_index=None):
+        """
+        Compute a single vector summary of a sequence of hidden states.
+        
+        Args:
+            hidden_states: Hidden states of shape (batch_size, seq_len, hidden_size)
+            cls_index: Index of the classification token (optional)
+        
+        Returns:
+            Tensor of shape (batch_size, num_classes) or (batch_size, hidden_size)
+        """
+        if self.summary_type == 'last':
+            output = hidden_states[:, -1]
+        elif self.summary_type == 'first':
+            output = hidden_states[:, 0]
+        elif self.summary_type == 'mean':
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == 'cls_index':
+            if cls_index is not None:
+                batch_size = hidden_states.shape[0]
+                device = hidden_states.device
+                cls_index = cls_index.view(-1, 1, 1).expand(batch_size, 1, hidden_states.size(-1))
+                output = hidden_states.gather(1, cls_index).squeeze(1)
+            else:
+                output = hidden_states[:, -1]  # fallback to last token
+        elif self.summary_type == 'attn':
+            # Simple attention mechanism
+            attention_weights = torch.softmax(torch.sum(hidden_states, dim=-1), dim=-1)
+            output = torch.sum(hidden_states * attention_weights.unsqueeze(-1), dim=1)
+        else:
+            output = hidden_states[:, -1]  # default to last token
+        
+        output = self.first_dropout(output)
+        
+        if hasattr(self, 'summary'):
+            output = self.summary(output)
+        
+        output = self.activation(output)
+        output = self.last_dropout(output)
+        
+        return output
 
 import math
 import os

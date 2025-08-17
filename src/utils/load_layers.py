@@ -83,7 +83,7 @@ def _find_index_file(
 ) -> str:
     # If we have cached weights (e.g., Pickle from older Petals versions), reuse them
     files = list_repo_files(model_name)
-    INDEX_FILES = [f for f in files if f.endswith(('.safetensors'))]
+    INDEX_FILES = [f for f in files if f.endswith(('.safetensors', '.safetensors.index.json'))]
 
     for filename in INDEX_FILES:
         path = hf_hub_download(

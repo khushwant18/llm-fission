@@ -55,6 +55,7 @@ def generate_text(prompt, max_len, transformer_components, pretrained_transforme
                 break
 
     generated_text = tokenizer.decode(input_ids.squeeze(), skip_special_tokens=True)
+    print("generate_text....: ", generate_text)
     return generated_text
 
 @app.route('/generate', methods=['POST'])

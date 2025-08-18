@@ -2,7 +2,7 @@ import numpy as np
 import requests
 import torch
 # from ...client import device_type
-def process_hidden_states(layer_url_map, hidden_states, device_type,cache_position=None,position_ids=None,batch_size=None,seq_length=None, causal_mask_mapping=None):
+def process_hidden_states(layer_url_map, hidden_states, device_type,cache_position=None,position_ids=None,batch_size=None,seq_length=None):
     """
     Processes the given hidden states by sending them to the specified URLs and returns the modified hidden states.
     
@@ -23,7 +23,7 @@ def process_hidden_states(layer_url_map, hidden_states, device_type,cache_positi
     for url in layer_url_map:
         try:
             # Send an HTTP POST request with the current hidden states data
-            response = requests.post(url, json={"hidden_states": current_hidden_states_np,"cache_position":cache_position,"position_ids":position_ids, "causal_mask_mapping": causal_mask_mapping,"batch_size":batch_size,"seq_length":seq_length})
+            response = requests.post(url, json={"hidden_states": current_hidden_states_np,"cache_position":cache_position,"position_ids":position_ids,"batch_size":batch_size,"seq_length":seq_length})
 
             if response.status_code == 200:
                 # Extract the 'res' field from the response JSON

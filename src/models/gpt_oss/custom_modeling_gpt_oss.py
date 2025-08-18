@@ -558,7 +558,7 @@ class GptOssModel(nn.Module):
         # Collect router logits if needed
         all_router_logits = () if output_router_logits else None
 
-        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids,causal_mask_mapping=causal_mask_mapping)
+        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids)
         
 
         # for decoder_layer in self.layers:

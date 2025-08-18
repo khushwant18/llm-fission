@@ -454,11 +454,11 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
     "The bare GptOss Model outputting raw hidden-states without any specific head on top.",
     GPTOSS_START_DOCSTRING,
 )
-class GptOssModel(MixtralModel):
+class GptOssModel(nn.Module):
     _no_split_modules = ["GptOssDecoderLayer"]
 
     def __init__(self, config: GptOssConfig):
-        super().__init__(config)
+        super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -478,6 +478,9 @@ class GptOssModel(MixtralModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
+    
+    def post_init(self):
+        pass 
 
     @check_model_inputs
     @add_start_docstrings_to_model_forward(GPTOSS_INPUTS_DOCSTRING)

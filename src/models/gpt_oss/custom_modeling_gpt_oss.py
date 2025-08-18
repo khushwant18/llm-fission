@@ -459,6 +459,7 @@ class GptOssModel(nn.Module):
 
     def __init__(self, config: GptOssConfig):
         super().__init__()
+        self.config = config 
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -557,7 +558,7 @@ class GptOssModel(nn.Module):
         # Collect router logits if needed
         all_router_logits = () if output_router_logits else None
 
-        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids)
+        hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids,causal_mask_mapping=causal_mask_mapping)
         
 
         # for decoder_layer in self.layers:

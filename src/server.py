@@ -10,6 +10,8 @@ from models.gpt_oss.custom_modeling_gpt_oss import GptOssModel
 from transformers import AutoConfig
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from pyngrok import ngrok
+from models.gpt_oss.custom_modeling_gpt_oss import create_causal_mask, create_sliding_window_causal_mask
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,22 +101,35 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
                     use_cache=False)
             hidden_states = outputs[0]
     elif model_type == "gpt_oss":
+        mask_kwargs = {
+            "config": config,
+            "input_embeds": hidden_states,
+            "attention_mask": None,  # Or pass from client if needed
+            "cache_position": cache_position,
+            "past_key_values": None,
+        }
+        
+        causal_mask_mapping = {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+        }
         # Use existing import
-        attention_mask = _prepare_4d_causal_attention_mask(
-            None,
-            (batch_size, seq_length),
-            hidden_states,
-            0,
-            sliding_window=getattr(config, 'sliding_window', None),
-        )
+        # attention_mask = _prepare_4d_causal_attention_mask(
+        #     None,
+        #     (batch_size, seq_length),
+        #     hidden_states,
+        #     0,
+        #     sliding_window=getattr(config, 'sliding_window', None),
+        # )
         
         # Get position embeddings  
         position_embeddings = gpt_oss_rotary(hidden_states, position_ids)
         
         for block in blocks:
+            attention_type = block.attention_type
             hidden_states = block(
                 hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=causal_mask_mapping[attention_type],
                 position_ids=position_ids,
                 past_key_value=None,
                 use_cache=False,

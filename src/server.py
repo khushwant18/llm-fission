@@ -101,6 +101,7 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
                     use_cache=False)
             hidden_states = outputs[0]
     elif model_type == "gpt_oss":
+        config._attn_implementation = "eager" 
         mask_kwargs = {
             "config": config,
             "input_embeds": hidden_states,

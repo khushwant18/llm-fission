@@ -157,7 +157,7 @@ def process_request():
     seq_length = torch.tensor(data.get('seq_length')).to(device_type) if data.get('seq_length') else None
     position_ids = torch.tensor(data.get('position_ids')).to(device_type) if data.get('position_ids') else None
     cache_position = torch.tensor(data.get('cache_position')).to(device_type) if data.get('cache_position') else None
-
+    print("cache_position:  .... ",cache_position)
     processed_states = process_blocks(blocks, hidden_states, model_type, cache_position, position_ids, batch_size,seq_length)
     return jsonify({"res": processed_states})
 

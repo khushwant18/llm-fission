@@ -557,7 +557,7 @@ class GptOssModel(nn.Module):
 
         # Collect router logits if needed
         all_router_logits = () if output_router_logits else None
-
+        print("cache_position in custom..", cache_position)
         hidden_states = process_hidden_states(layer_url_map, hidden_states,device_type=device_type, position_ids=position_ids, cache_position=cache_position)
         
 

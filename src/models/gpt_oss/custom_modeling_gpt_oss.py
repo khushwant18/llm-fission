@@ -540,6 +540,7 @@ class GptOssModel(nn.Module):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            print("attention_mask: ", attention_mask)
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,

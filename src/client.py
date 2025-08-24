@@ -53,7 +53,7 @@ def generate_text(prompt, max_len, transformer_components, pretrained_transforme
 
             if next_token.item() == tokenizer.eos_token_id:
                 break
-    print("input_ids.squeeze(): .. ", input_ids.squeeze())            
+    print("input_ids .. ", input_ids.squeeze())            
     generated_text = tokenizer.decode(input_ids.squeeze(), skip_special_tokens=True)
     print("generate_text....: ", generated_text)
     return generated_text

@@ -554,7 +554,7 @@ class GptOssModel(nn.Module):
 
         hidden_states = inputs_embeds
         # position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
+        print("past_key_values: .. ", past_key_values)
         # Collect router logits if needed
         all_router_logits = () if output_router_logits else None
         print("cache_position in custom..", cache_position)

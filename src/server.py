@@ -11,11 +11,11 @@ from transformers import AutoConfig
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from pyngrok import ngrok
 from models.gpt_oss.custom_modeling_gpt_oss import create_causal_mask, create_sliding_window_causal_mask
-
+from transformers.cache_utils import DynamicCache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+past_key_values = DynamicCache()
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -107,7 +107,7 @@ def process_blocks(blocks: List[torch.nn.Module], hidden_states: torch.Tensor,
             "input_embeds": hidden_states,
             "attention_mask": None,  # Or pass from client if needed
             "cache_position": cache_position,
-            "past_key_values": None,
+            "past_key_values": past_key_values,
         }
         
         causal_mask_mapping = {
@@ -157,7 +157,7 @@ def process_request():
     seq_length = torch.tensor(data.get('seq_length')).to(device_type) if data.get('seq_length') else None
     position_ids = torch.tensor(data.get('position_ids')).to(device_type) if data.get('position_ids') else None
     cache_position = torch.tensor(data.get('cache_position')).to(device_type) if data.get('cache_position') else None
-    print("cache_position:  .... ",cache_position)
+    # print("cache_position:  .... ",cache_position)
     processed_states = process_blocks(blocks, hidden_states, model_type, cache_position, position_ids, batch_size,seq_length)
     return jsonify({"res": processed_states})
 

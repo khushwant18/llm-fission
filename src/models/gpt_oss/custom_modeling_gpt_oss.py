@@ -502,6 +502,7 @@ class GptOssModel(nn.Module):
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[Tuple, MoeModelOutputWithPast]:
+        embed_tokens, norm = transformer_components
         """
         Forward pass for GptOss model.
         
@@ -528,7 +529,7 @@ class GptOssModel(nn.Module):
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = embed_tokens(input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -577,7 +578,7 @@ class GptOssModel(nn.Module):
             # TODO: Collect router logits from MLP if needed
             # This would require modifying the decoder layer forward to return router logits
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = norm(hidden_states)
         
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
